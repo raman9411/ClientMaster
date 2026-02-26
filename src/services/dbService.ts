@@ -1,115 +1,151 @@
-import { db } from "../db/database.js";
+import { supabase } from "../db/database.js";
 import bcrypt from "bcryptjs";
 
 export const dbService = {
   // Users
-  getUserByEmail: (email: string) => db.prepare("SELECT * FROM users WHERE email = ?").get(email),
-  getUserById: (id: number) => db.prepare("SELECT id, name, email, role FROM users WHERE id = ?").get(id),
-  getUsersByRole: (role: string) => db.prepare("SELECT id, name, email, role FROM users WHERE role = ?").all(role),
-  getAllUsers: () => db.prepare("SELECT id, name, email, role FROM users").all(),
-  updateUserRole: (id: number, role: string) => {
-    return db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
+  getUserByEmail: async (email: string) => {
+    const { data } = await supabase.from('users').select('*').eq('email', email).single();
+    return data;
+  },
+  getUserById: async (id: number) => {
+    const { data } = await supabase.from('users').select('id, name, email, role').eq('id', id).single();
+    return data;
+  },
+  getUsersByRole: async (role: string) => {
+    const { data } = await supabase.from('users').select('id, name, email, role').eq('role', role);
+    return data || [];
+  },
+  getAllUsers: async () => {
+    const { data } = await supabase.from('users').select('id, name, email, role').order('created_at', { ascending: false });
+    return data || [];
+  },
+  updateUserRole: async (id: number, role: string) => {
+    const { error } = await supabase.from('users').update({ role }).eq('id', id);
+    return !error;
   },
   createUser: async (user: any) => {
     const hashedPassword = await bcrypt.hash(user.password, 10);
-    const info = db.prepare("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)").run(user.name, user.email, hashedPassword, user.role || 'employee');
-    return db.prepare("SELECT id, name, email, role FROM users WHERE id = ?").get(info.lastInsertRowid);
+    const { data } = await supabase.from('users').insert([{
+      name: user.name,
+      email: user.email,
+      password: hashedPassword,
+      role: user.role || 'employee'
+    }]).select('id, name, email, role').single();
+    return data;
   },
-  deleteUser: (id: number) => {
-    const info = db.prepare("DELETE FROM users WHERE id = ?").run(id);
-    return info.changes > 0;
+  deleteUser: async (id: number) => {
+    const { error } = await supabase.from('users').delete().eq('id', id);
+    return !error;
   },
 
   // Clients
-  getAllClients: () => db.prepare("SELECT * FROM clients ORDER BY created_at DESC").all(),
-  getClientById: (id: number) => db.prepare("SELECT * FROM clients WHERE id = ?").get(id),
-  createClient: (client: any) => {
-    const servicesStr = Array.isArray(client.services) ? JSON.stringify(client.services) : (client.services || "[]");
-    const info = db.prepare(`
-      INSERT INTO clients (name, contact_person, email, phone, services)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      client.name,
-      client.contact_person || "",
-      client.email || "",
-      client.phone || "",
-      servicesStr
-    );
-    return db.prepare("SELECT * FROM clients WHERE id = ?").get(info.lastInsertRowid);
+  getAllClients: async () => {
+    const { data } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
+    return data || [];
   },
-  updateClient: (id: number, client: any) => {
-    const servicesStr = Array.isArray(client.services) ? JSON.stringify(client.services) : (client.services || "[]");
-    const info = db.prepare(`
-      UPDATE clients 
-      SET name = ?, contact_person = ?, email = ?, phone = ?, services = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(
-      client.name,
-      client.contact_person || "",
-      client.email || "",
-      client.phone || "",
-      servicesStr,
-      id
-    );
-    return info.changes > 0 ? db.prepare("SELECT * FROM clients WHERE id = ?").get(id) : null;
+  getClientById: async (id: number) => {
+    const { data } = await supabase.from('clients').select('*').eq('id', id).single();
+    return data;
   },
-  deleteClient: (id: number) => {
-    const info = db.prepare("DELETE FROM clients WHERE id = ?").run(id);
-    return info.changes > 0;
+  createClient: async (client: any) => {
+    const servicesStr = Array.isArray(client.services) ? JSON.stringify(client.services) : (client.services || "[]");
+    const { data } = await supabase.from('clients').insert([{
+      name: client.name,
+      contact_person: client.contact_person || "",
+      email: client.email || "",
+      phone: client.phone || "",
+      services: servicesStr
+    }]).select('*').single();
+    return data;
+  },
+  updateClient: async (id: number, client: any) => {
+    const servicesStr = Array.isArray(client.services) ? JSON.stringify(client.services) : (client.services || "[]");
+    const { data } = await supabase.from('clients').update({
+      name: client.name,
+      contact_person: client.contact_person || "",
+      email: client.email || "",
+      phone: client.phone || "",
+      services: servicesStr,
+      updated_at: new Date().toISOString()
+    }).eq('id', id).select('*').single();
+    return data;
+  },
+  deleteClient: async (id: number) => {
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    return !error;
   },
 
   // Tasks
-  getAllTasks: () => db.prepare(`
-    SELECT t.*, c.name as client_name, u.name as doer_name 
-    FROM tasks t 
-    LEFT JOIN clients c ON t.client_id = c.id 
-    LEFT JOIN users u ON t.doer_id = u.id 
-    ORDER BY t.created_at DESC
-  `).all(),
-  getTaskById: (id: number) => db.prepare(`
-    SELECT t.*, c.name as client_name, u.name as doer_name 
-    FROM tasks t 
-    LEFT JOIN clients c ON t.client_id = c.id 
-    LEFT JOIN users u ON t.doer_id = u.id 
-    WHERE t.id = ?
-  `).get(id),
-  createTask: (task: any) => {
-    const info = db.prepare(`
-      INSERT INTO tasks (title, client_id, doer_id, remarks, frequency, due_date_logic, due_date, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      task.title,
-      task.client_id || null,
-      task.doer_id || null,
-      task.remarks || "",
-      task.frequency || "One Time",
-      task.due_date_logic ? JSON.stringify(task.due_date_logic) : "{}",
-      task.due_date || null,
-      task.status || "Not Started"
-    );
-    return db.prepare("SELECT * FROM tasks WHERE id = ?").get(info.lastInsertRowid);
+  getAllTasks: async () => {
+    // Supabase automatically formats joined tables as nested objects
+    const { data } = await supabase.from('tasks').select(`
+      *,
+      client:clients!client_id(name),
+      doer:users!doer_id(name)
+    `).order('created_at', { ascending: false });
+
+    // Map it back to the flat structure the frontend expects
+    return (data || []).map((t: any) => ({
+      ...t,
+      client_name: t.client ? t.client.name : null,
+      doer_name: t.doer ? t.doer.name : null
+    }));
   },
-  updateTaskStatus: (id: number, status: string, completedAt: string | null) => {
-    return db.prepare(`
-      UPDATE tasks 
-      SET status = ?, completed_at = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(status, completedAt, id);
+  getTaskById: async (id: number) => {
+    const { data } = await supabase.from('tasks').select(`
+      *,
+      client:clients!client_id(name),
+      doer:users!doer_id(name)
+    `).eq('id', id).single();
+
+    if (data) {
+      data.client_name = data.client ? data.client.name : null;
+      data.doer_name = data.doer ? data.doer.name : null;
+    }
+    return data;
   },
-  updateTaskAudit: (id: number, status: string, auditStatus: string, auditRemarks: string) => {
-    return db.prepare(`
-      UPDATE tasks 
-      SET status = ?, audit_status = ?, audit_remarks = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(status, auditStatus, auditRemarks, id);
+  createTask: async (task: any) => {
+    const { data } = await supabase.from('tasks').insert([{
+      title: task.title,
+      client_id: task.client_id || null,
+      doer_id: task.doer_id || null,
+      remarks: task.remarks || "",
+      frequency: task.frequency || "One Time",
+      due_date_logic: task.due_date_logic ? JSON.stringify(task.due_date_logic) : "{}",
+      due_date: task.due_date || null,
+      status: task.status || "Not Started"
+    }]).select('*').single();
+    return data;
   },
-  logTaskHistory: (taskId: number, userId: number | null, userName: string, action: string, details: string) => {
-    return db.prepare(`
-      INSERT INTO task_history (task_id, user_id, user_name, action, details)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(taskId, userId, userName, action, details);
+  updateTaskStatus: async (id: number, status: string, completedAt: string | null) => {
+    const { error } = await supabase.from('tasks').update({
+      status,
+      completed_at: completedAt,
+      updated_at: new Date().toISOString()
+    }).eq('id', id);
+    return !error;
   },
-  getTaskHistory: (taskId: number) => {
-    return db.prepare("SELECT * FROM task_history WHERE task_id = ? ORDER BY created_at DESC").all(taskId);
+  updateTaskAudit: async (id: number, status: string, auditStatus: string, auditRemarks: string) => {
+    const { error } = await supabase.from('tasks').update({
+      status,
+      audit_status: auditStatus,
+      audit_remarks: auditRemarks,
+      updated_at: new Date().toISOString()
+    }).eq('id', id);
+    return !error;
+  },
+  logTaskHistory: async (taskId: number, userId: number | null, userName: string, action: string, details: string) => {
+    const { error } = await supabase.from('task_history').insert([{
+      task_id: taskId,
+      user_id: userId,
+      user_name: userName,
+      action,
+      details
+    }]);
+    return !error;
+  },
+  getTaskHistory: async (taskId: number) => {
+    const { data } = await supabase.from('task_history').select('*').eq('task_id', taskId).order('created_at', { ascending: false });
+    return data || [];
   }
 };

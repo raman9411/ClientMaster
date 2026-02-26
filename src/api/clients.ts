@@ -4,9 +4,10 @@ import { dbService } from "../services/dbService.js";
 const router = Router();
 
 // Get all clients
-router.get("/", (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    res.json(dbService.getAllClients());
+    const clients = await dbService.getAllClients();
+    res.json(clients);
   } catch (error) {
     console.error("Error fetching clients:", error);
     res.status(500).json({ error: "Failed to fetch clients" });
@@ -14,9 +15,9 @@ router.get("/", (req, res) => {
 });
 
 // Get a single client
-router.get("/:id", (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
-    const client = dbService.getClientById(Number(req.params.id));
+    const client = await dbService.getClientById(Number(req.params.id));
     if (!client) {
       return res.status(404).json({ error: "Client not found" });
     }
@@ -28,13 +29,13 @@ router.get("/:id", (req, res) => {
 });
 
 // Create a new client
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   if (!req.body.name) {
     return res.status(400).json({ error: "Client name is required" });
   }
 
   try {
-    const newClient = dbService.createClient(req.body);
+    const newClient = await dbService.createClient(req.body);
     res.status(201).json(newClient);
   } catch (error) {
     console.error("Error creating client:", error);
@@ -43,13 +44,13 @@ router.post("/", (req, res) => {
 });
 
 // Update a client
-router.put("/:id", (req, res) => {
+router.put("/:id", async (req, res) => {
   if (!req.body.name) {
     return res.status(400).json({ error: "Client name is required" });
   }
 
   try {
-    const updatedClient = dbService.updateClient(Number(req.params.id), req.body);
+    const updatedClient = await dbService.updateClient(Number(req.params.id), req.body);
     if (!updatedClient) {
       return res.status(404).json({ error: "Client not found" });
     }
@@ -61,9 +62,9 @@ router.put("/:id", (req, res) => {
 });
 
 // Delete a client
-router.delete("/:id", (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
-    const success = dbService.deleteClient(Number(req.params.id));
+    const success = await dbService.deleteClient(Number(req.params.id));
     if (!success) {
       return res.status(404).json({ error: "Client not found" });
     }

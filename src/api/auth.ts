@@ -16,13 +16,13 @@ router.post("/signup", async (req, res) => {
 
   try {
     // Check if user exists
-    const existingUser = dbService.getUserByEmail(email);
+    const existingUser = await dbService.getUserByEmail(email);
     if (existingUser) {
       return res.status(400).json({ error: "Email already in use" });
     }
 
     // Check if it's the first user ever
-    const allUsers = dbService.getAllUsers();
+    const allUsers = await dbService.getAllUsers();
     let finalRole = role || 'employee';
     if (allUsers.length === 0) {
       finalRole = 'admin'; // First user is automatically assigned as admin
@@ -38,7 +38,7 @@ router.post("/signup", async (req, res) => {
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: "lax",
       maxAge: 24 * 60 * 60 * 1000 // 1 day
     });
 
@@ -58,7 +58,7 @@ router.post("/signin", async (req, res) => {
   }
 
   try {
-    const user = dbService.getUserByEmail(email) as any;
+    const user = await dbService.getUserByEmail(email) as any;
     if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -75,7 +75,7 @@ router.post("/signin", async (req, res) => {
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: "lax",
       maxAge: 24 * 60 * 60 * 1000 // 1 day
     });
 
@@ -88,7 +88,7 @@ router.post("/signin", async (req, res) => {
 });
 
 // Get Current User
-router.get("/me", (req, res) => {
+router.get("/me", async (req, res) => {
   const token = req.cookies.token;
   if (!token) {
     return res.status(401).json({ error: "Not authenticated" });
@@ -96,7 +96,7 @@ router.get("/me", (req, res) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    const user = dbService.getUserById(decoded.id);
+    const user = await dbService.getUserById(decoded.id);
 
     if (!user) {
       return res.status(401).json({ error: "User not found" });

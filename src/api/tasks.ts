@@ -17,16 +17,16 @@ const getUserFromReq = (req: any) => {
   }
 };
 
-router.get("/", (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    res.json(dbService.getAllTasks());
+    res.json(await dbService.getAllTasks());
   } catch (error) {
     console.error("Error fetching tasks:", error);
     res.status(500).json({ error: "Failed to fetch tasks" });
   }
 });
 
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   if (!req.body.title) {
     return res.status(400).json({ error: "Task title is required" });
   }
@@ -41,10 +41,10 @@ router.post("/", (req, res) => {
       initialDueDate = new Date(req.body.due_date_logic.date).toISOString();
     }
 
-    const newTask = dbService.createTask({ ...req.body, due_date: initialDueDate });
+    const newTask = await dbService.createTask({ ...req.body, due_date: initialDueDate });
 
     if (user) {
-      dbService.logTaskHistory(newTask.id, user.id, user.name, "Created", "Task created");
+      await dbService.logTaskHistory(newTask.id, user.id, user.name, "Created", "Task created");
     }
     res.status(201).json(newTask);
   } catch (error) {
@@ -53,7 +53,7 @@ router.post("/", (req, res) => {
   }
 });
 
-router.put("/:id/status", (req, res) => {
+router.put("/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -62,18 +62,18 @@ router.put("/:id/status", (req, res) => {
     const user = getUserFromReq(req);
     const userName = user ? user.name : "System";
 
-    const oldTask = dbService.getTaskById(Number(id)) as any;
+    const oldTask = await dbService.getTaskById(Number(id)) as any;
 
-    dbService.updateTaskStatus(Number(id), status, completedAt);
-    dbService.logTaskHistory(Number(id), user?.id || null, userName, "Status Updated", `Status changed to ${status}`);
+    await dbService.updateTaskStatus(Number(id), status, completedAt);
+    await dbService.logTaskHistory(Number(id), user?.id || null, userName, "Status Updated", `Status changed to ${status}`);
 
     // If completed and recurring, schedule next
     if (['Completed', 'Completed Late'].includes(status) && oldTask.frequency !== "One Time") {
-      const logicData = JSON.parse(oldTask.due_date_logic || '{}');
+      const logicData = typeof oldTask.due_date_logic === 'string' ? JSON.parse(oldTask.due_date_logic || '{}') : oldTask.due_date_logic || {};
       const baseDate = oldTask.due_date || completedAt || new Date().toISOString();
       const nextDueDate = calculateNextDueDate(baseDate, oldTask.frequency, logicData);
 
-      const nextTask = dbService.createTask({
+      const nextTask = await dbService.createTask({
         title: oldTask.title,
         client_id: oldTask.client_id,
         doer_id: oldTask.doer_id,
@@ -83,7 +83,7 @@ router.put("/:id/status", (req, res) => {
         due_date: nextDueDate,
         status: "Not Started"
       });
-      dbService.logTaskHistory(nextTask.id, null, "System", "Auto-Generated", `Task auto-generated from recurring parent task #${oldTask.id}`);
+      await dbService.logTaskHistory(nextTask.id, null, "System", "Auto-Generated", `Task auto-generated from recurring parent task #${oldTask.id}`);
     }
 
     res.json({ success: true });
@@ -93,7 +93,7 @@ router.put("/:id/status", (req, res) => {
   }
 });
 
-router.put("/:id/audit", (req, res) => {
+router.put("/:id/audit", async (req, res) => {
   try {
     const { id } = req.params;
     const { status, audit_status, audit_remarks } = req.body;
@@ -101,8 +101,8 @@ router.put("/:id/audit", (req, res) => {
     const user = getUserFromReq(req);
     const userName = user ? user.name : "System";
 
-    dbService.updateTaskAudit(Number(id), status, audit_status, audit_remarks);
-    dbService.logTaskHistory(Number(id), user?.id || null, userName, "Audit Updated", `Audit status changed to ${audit_status}`);
+    await dbService.updateTaskAudit(Number(id), status, audit_status, audit_remarks);
+    await dbService.logTaskHistory(Number(id), user?.id || null, userName, "Audit Updated", `Audit status changed to ${audit_status}`);
 
     res.json({ success: true });
   } catch (error) {
@@ -110,10 +110,10 @@ router.put("/:id/audit", (req, res) => {
   }
 });
 
-router.get("/:id/history", (req, res) => {
+router.get("/:id/history", async (req, res) => {
   try {
     const { id } = req.params;
-    res.json(dbService.getTaskHistory(Number(id)));
+    res.json(await dbService.getTaskHistory(Number(id)));
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch task history" });
   }
