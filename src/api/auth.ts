@@ -31,6 +31,11 @@ router.post("/signup", async (req, res) => {
     // Insert user
     const newUser = await dbService.createUser({ name, email, password, role: finalRole });
 
+    if (!newUser) {
+      console.error("Supabase returned null for user insert — check Row Level Security (RLS) policies.");
+      return res.status(500).json({ error: "Failed to create account. The database rejected the request. Please check Supabase RLS policies." });
+    }
+
     // Create token
     const token = jwt.sign({ id: newUser.id, role: newUser.role }, JWT_SECRET, { expiresIn: "1d" });
 

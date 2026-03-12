@@ -4,7 +4,8 @@ import bcrypt from "bcryptjs";
 export const dbService = {
   // Users
   getUserByEmail: async (email: string) => {
-    const { data } = await supabase.from('users').select('*').eq('email', email).single();
+    const { data, error } = await supabase.from('users').select('*').eq('email', email).single();
+    if (error && error.code !== 'PGRST116') console.error('[Supabase] getUserByEmail error:', error);
     return data;
   },
   getUserById: async (id: number) => {
@@ -16,7 +17,8 @@ export const dbService = {
     return data || [];
   },
   getAllUsers: async () => {
-    const { data } = await supabase.from('users').select('id, name, email, role').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('users').select('id, name, email, role').order('created_at', { ascending: false });
+    if (error) console.error('[Supabase] getAllUsers error:', error);
     return data || [];
   },
   updateUserRole: async (id: number, role: string) => {
@@ -25,12 +27,13 @@ export const dbService = {
   },
   createUser: async (user: any) => {
     const hashedPassword = await bcrypt.hash(user.password, 10);
-    const { data } = await supabase.from('users').insert([{
+    const { data, error } = await supabase.from('users').insert([{
       name: user.name,
       email: user.email,
       password: hashedPassword,
       role: user.role || 'employee'
     }]).select('id, name, email, role').single();
+    if (error) console.error('[Supabase] createUser error:', JSON.stringify(error));
     return data;
   },
   deleteUser: async (id: number) => {
